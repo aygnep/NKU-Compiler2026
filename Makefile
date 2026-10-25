@@ -42,12 +42,6 @@ SOURCES := $(filter-out $(GEN_SRCS), $(SOURCES))
 
 all: $(LEXER_FILES) $(TARGET)
 
-$(OBJ_DIR) $(BIN_DIR):
-	@mkdir -p $@
-
-$(OBJ_DIR)/%/:
-	@mkdir -p $@
-
 $(TARGET): $(ALL_OBJECTS) | $(BIN_DIR)
 	@echo "Linking object files -> $@"
 	@$(CXX) $(ALL_OBJECTS) -o $@
@@ -66,7 +60,7 @@ $(GEN_OBJECTS): $(LEXER_FILES)
 -include $(ALL_OBJECTS:.o=.d)
 
 $(BISON_H) $(BISON_C) $(LOC_H): $(BISON_SRC)
-	@bison -d --language=c++ --defines=$(BISON_H) -o $(BISON_C) $(BISON_SRC)
+	@bison -d --defines=$(BISON_H) -o $(BISON_C) $(BISON_SRC)
 	@if [ -f $(BISON_H) ]; then clang-format -i $(BISON_H); fi
 	@if [ -f $(BISON_C) ]; then clang-format -i $(BISON_C); fi
 	@if [ -f $(LOC_H) ]; then clang-format -i $(LOC_H); fi
