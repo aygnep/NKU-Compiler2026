@@ -41,6 +41,8 @@ LEXER_FILES = $(LEXER_C) $(BISON_H) $(BISON_C) $(LOC_H)
 SOURCES := $(filter-out $(GEN_SRCS), $(SOURCES))
 
 all: $(LEXER_FILES) $(TARGET)
+$(OBJ_DIR) $(BIN_DIR):
+	@mkdir -p $@
 
 $(TARGET): $(ALL_OBJECTS) | $(BIN_DIR)
 	@echo "Linking object files -> $@"
@@ -61,13 +63,13 @@ $(GEN_OBJECTS): $(LEXER_FILES)
 
 $(BISON_H) $(BISON_C) $(LOC_H): $(BISON_SRC)
 	@bison -d --defines=$(BISON_H) -o $(BISON_C) $(BISON_SRC)
-	@if [ -f $(BISON_H) ]; then clang-format -i $(BISON_H); fi
-	@if [ -f $(BISON_C) ]; then clang-format -i $(BISON_C); fi
-	@if [ -f $(LOC_H) ]; then clang-format -i $(LOC_H); fi
+	@if command -v clang-format >/dev/null 2>&1; then clang-format -i $(BISON_H); fi
+	@if command -v clang-format >/dev/null 2>&1; then clang-format -i $(BISON_C); fi
+	@if command -v clang-format >/dev/null 2>&1; then clang-format -i $(LOC_H); fi
 
 $(LEXER_C): $(LEXER_SRC) $(BISON_H)
 	@flex --c++ --outfile=$(LEXER_C) $(LEXER_SRC)
-	@if [ -f $(LEXER_C) ]; then clang-format -i $(LEXER_C); fi
+	@if command -v clang-format >/dev/null 2>&1; then clang-format -i $(LEXER_C); fi
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)

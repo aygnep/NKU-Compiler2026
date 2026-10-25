@@ -6,6 +6,7 @@ test.s
 test.bin
 test_output
 .cache
+.DS_Store
 frontend/parser/location.hh
 frontend/parser/lexer.cpp
 frontend/parser/lexer.h

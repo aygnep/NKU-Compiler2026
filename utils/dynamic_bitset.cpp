@@ -4,7 +4,7 @@
 #include <cmath>
 
 #ifdef __GNUC__
-#include <x86intrin.h>
+//#include <x86intrin.h>
 #define CELE_ALIGNED(x) __attribute__((aligned(x)))
 #else
 #define CELE_ALIGNED(x) __declspec(align(x))
