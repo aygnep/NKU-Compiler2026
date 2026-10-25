@@ -71,6 +71,7 @@ $(LEXER_C): $(LEXER_SRC) $(BISON_H)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
+	find . -type f -name '.DS_Store' -delete
 
 clean-lexer:
 	rm -f $(LEXER_FILES)
