@@ -8,13 +8,18 @@ namespace FE
 
     void Parser::reportError(const location& loc, const std::string& message) { _parser.error(loc, message); }
 
+    /*调用一次 _scanner.nextToken()。
+扫描器从当前输入位置继续扫描，直到识别出一个需要返回的 Token。
+转换、保存。
+再次调用，读取下一个。
+遇到文件结束 Token 时停止。*/
     std::vector<Token> Parser::parseTokens_impl()
     {
         std::vector<Token> tokens;
         while (true)
         {
-            type token = _scanner.nextToken();
-            if (token.kind() == kind::S_END) break;
+            type token = _scanner.nextToken();//nextToken() 是 Flex 根据 lexer.l 生成的扫描函数
+            if (token.kind() == kind::S_END) break;//遇到结束token则停止
 
             Token result;
             result.token_name    = token.name();
@@ -46,7 +51,7 @@ namespace FE
                 default: result.type = Token::TokenType::T_NONE; break;
             }
 
-            tokens.push_back(result);
+            tokens.push_back(result);//转换成result并保存
         }
 
         return tokens;

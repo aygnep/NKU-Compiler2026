@@ -8,7 +8,7 @@
 #endif
 
 #undef YY_DECL
-#define YY_DECL FE::YaccParser::symbol_type FE::Scanner::nextToken()
+#define YY_DECL FE::YaccParser::symbol_type FE::Scanner::nextToken()//这个宏指定 Flex 生成的扫描函数叫 FE::Scanner::nextToken()
 
 #include <frontend/parser/yacc.h>
 

@@ -13,10 +13,12 @@
     using namespace FE;
 
     static location loc;
-
-    // The location object records the half-open interval of the current match.
-    // parser.cpp converts Bison's one-based column to the course's zero-based
-    // column when it builds the public Token object.
+    // YY_USER_ACTION 宏会自动插入到每个规则的代码块开头
+    // 如下方的 "int"               { RETT(INT, loc) }
+    // 实际上会被转换为
+    // "int"               { loc.step(); loc.columns(yyleng); RETT(INT, loc) }
+    // 这样就能自动更新 loc 的位置
+    // yyleng 是当前匹配的字符串的长度
     #define YY_USER_ACTION      \
         loc.step();             \
         loc.columns(yyleng);
@@ -48,7 +50,11 @@ DECEXP  [eE][+-]?{D}+
 HEXEXP  [pP][+-]?{D}+
 DECFLOAT (({D}+\.{D}*|\.{D}+){DECEXP}?|{D}+{DECEXP})
 HEXFLOAT 0[xX](({H}+\.{H}*|\.{H}+)|{H}+){HEXEXP}
-
+/*输入读到 count 时：
+1. Flex 发现 count 符合 ID。
+2. yytext 指向这次匹配到的原文，也就是 count。
+3. 复制成 C++ 字符串。
+4. 创建并返回一个 IDENT，附带字符串属性和位置信息 */
 %%
 
     /* Newlines and horizontal whitespace are discarded but still advance loc. */
@@ -128,7 +134,7 @@ HEXFLOAT 0[xX](({H}+\.{H}*|\.{H}+)|{H}+){HEXEXP}
 }
 
 {ID}               {
-    auto text = std::string(yytext);
+    auto text = std::string(yytext);//yytext 指向 当前规则匹配到的原始文本。
     return YaccParser::make_IDENT(text, loc);
 }
 

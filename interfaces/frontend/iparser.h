@@ -28,7 +28,7 @@ namespace FE
         void setOutStream(std::ostream* outStream) { this->outStream = outStream; }
 
       public:
-        std::vector<Token> parseTokens() { return static_cast<Derived*>(this)->parseTokens_impl(); }
+        std::vector<Token> parseTokens() { return static_cast<Derived*>(this)->parseTokens_impl(); }//转发
         AST::Root*         parseAST() { return static_cast<Derived*>(this)->parseAST_impl(); }
     };
 }  // namespace FE

@@ -115,7 +115,7 @@ int main(int argc, char** argv)
     cout << "Output: " << (outputFile.empty() ? "standard output" : outputFile) << endl;
     cout << "Optimize level: " << optimizeLevel << endl;
 
-    ifstream       in(inputFile);
+    ifstream       in(inputFile);//打开输入文件
     istream*       inStream = &in;
     FE::AST::Node* ast      = nullptr;
     int            ret      = 0;
@@ -152,11 +152,11 @@ int main(int argc, char** argv)
      * 在 `testcase/lexer/` 目录下提供了一些测试用例以及它们的预期输出，可以自行查看。
      */
     {
-        FE::Parser parser(inStream, outStream);
+        FE::Parser parser(inStream, outStream);//创建parser语法分析器对象，传入输入输出流。lexer词法分析器
 
         if (step == "-lexer")
         {
-            auto tokens = parser.parseTokens();
+            auto tokens = parser.parseTokens();//命令行制定lexer则调用
 
             *outStream << left;
             *outStream << setw(STR_PW) << "Token" << setw(STR_PW) << "Lexeme" << setw(STR_PW) << "Property"

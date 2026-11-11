@@ -22,7 +22,7 @@ namespace FE
         Parser(std::istream* inStream, std::ostream* outStream)
             : iParser<Parser>(inStream, outStream), _scanner(*this), _parser(_scanner, *this), ast(nullptr)
         {
-            _scanner.switch_streams(inStream, outStream);
+            _scanner.switch_streams(inStream, outStream);//把输入流绑定到 _scanner
         }
         ~Parser() {}
 
