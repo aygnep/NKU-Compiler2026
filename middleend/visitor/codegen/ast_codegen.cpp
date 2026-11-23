@@ -50,22 +50,36 @@ namespace ME
 
     void ASTCodeGen::handleGlobalVarDecl(FE::AST::VarDeclStmt* decls, Module* m)
     {
-        // TODO(Lab 3-2): 生成全局变量声明 IR（支持标量与数组的初值）
-        (void)decls;
-        (void)m;
-        TODO("Lab3-2: Implement global var declaration IR generation");
+        for (auto* d : *decls->decl->decls)
+        {
+            auto* l = dynamic_cast<FE::AST::LeftValExpr*>(d->lval);
+            const auto& a = d->info;
+            DataType t = convert(decls->decl->type);
+            if (!a.arrayDims.empty()) m->globalVars.push_back(new GlbVarDeclInst(t, l->entry->getName(), a));
+            else
+            {
+                Operand* init = t == DataType::F32 ? static_cast<Operand*>(getImmeF32Operand(a.initList[0].getFloat())) :
+                    static_cast<Operand*>(getImmeI32Operand(a.initList[0].getInt()));
+                m->globalVars.push_back(new GlbVarDeclInst(t, l->entry->getName(), init));
+            }
+        }
     }
 
     void ASTCodeGen::visit(FE::AST::Root& node, Module* m)
     {
-        // 示例：注册库函数
         libFuncRegister(m);
+        if (node.getStmts()) for (auto* stmt : *node.getStmts())
+        {
+            if (auto* d = dynamic_cast<FE::AST::VarDeclStmt*>(stmt)) handleGlobalVarDecl(d, m);
+            else apply(*this, *stmt, m);
+        }
+    }
 
-        // TODO(Lab 3-2): 生成模块级 IR
-        // 处理顶层语句：全局变量声明、函数定义等
-        (void)node;
-        (void)m;
-        TODO("Lab3-2: Implement Root IR generation");
+    size_t ASTCodeGen::castReg(DataType from, DataType to, size_t reg)
+    {
+        if (from == to) return reg;
+        for (auto* inst : createTypeConvertInst(from, to, reg)) insert(inst);
+        return getMaxReg();
     }
 
     LoadInst* ASTCodeGen::createLoadInst(DataType t, Operand* ptr, size_t resReg)
@@ -249,7 +263,7 @@ namespace ME
                     case DataType::I1:
                     {
                         size_t    destReg = getNewRegId();
-                        FcmpInst* fcmp    = createFcmpInst_ImmeRight(FCmpOp::ONE, srcReg, 0.0f, destReg);
+                        FcmpInst* fcmp    = createFcmpInst_ImmeRight(FCmpOp::UNE, srcReg, 0.0f, destReg);
                         insts.push_back(fcmp);
                         break;
                     }

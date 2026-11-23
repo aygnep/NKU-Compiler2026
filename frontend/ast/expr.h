@@ -31,7 +31,9 @@ namespace FE::AST
     class LeftValExpr : public ExprNode
     {
       public:
-        bool                    isLval;
+        bool                    isLval = false;
+        VarAttr                 resolved; // 独立保存属性，退出符号表作用域后仍有效
+        std::vector<int>         remainingDims;
         Entry*                  entry;
         std::vector<ExprNode*>* indices;
 

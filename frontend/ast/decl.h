@@ -69,6 +69,8 @@ namespace FE::AST
     class VarDeclarator : public DeclNode
     {
       public:
+        VarAttr info;
+        std::vector<ExprNode*> initElements; // 非拥有指针；空槽表示隐式零
         ExprNode* lval;
         InitDecl* init;
 
@@ -85,6 +87,7 @@ namespace FE::AST
     class ParamDeclarator : public DeclNode
     {
       public:
+        VarAttr                 info;
         Type*                   type;
         Entry*                  entry;
         std::vector<ExprNode*>* dims;

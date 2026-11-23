@@ -201,7 +201,7 @@ namespace ME
         static void neqFloat(ASTCodeGen* codegen, Block* block, size_t lhsReg, size_t rhsReg)
         {
             size_t    dest = codegen->getNewRegId();
-            FcmpInst* neq  = codegen->createFcmpInst(FCmpOp::ONE, lhsReg, rhsReg, dest);
+            FcmpInst* neq  = codegen->createFcmpInst(FCmpOp::UNE, lhsReg, rhsReg, dest);
             block->insert(neq);
         }
     };
@@ -222,6 +222,7 @@ namespace ME
 
         apply(*this, node, m);
         size_t srcReg = getMaxReg();
+        block = curBlock;
 
         DataType srcType = convert(node.attr.val.value.type);
 
@@ -290,6 +291,7 @@ namespace ME
         size_t lhsReg = getMaxReg();
         apply(*this, rhs, m);
         size_t rhsReg = getMaxReg();
+        block = curBlock;
 
         DataType lhsType = convert(lhs.attr.val.value.type);
         DataType rhsType = convert(rhs.attr.val.value.type);

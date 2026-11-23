@@ -162,7 +162,7 @@ namespace FE::AST
         result.isConstexpr = lhs.isConstexpr && rhs.isConstexpr;
         result.value.type  = resultType;
 
-        if ((op == Operator::DIV || op == Operator::MOD) && rhs.isConstexpr)
+        if ((op == Operator::DIV || op == Operator::MOD) && rhs.isConstexpr && !std::is_same_v<T, float>)
         {
             T rvalue = getValue<T>(rhs.value);
             if (rvalue == 0)

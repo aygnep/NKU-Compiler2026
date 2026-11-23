@@ -1,54 +1,149 @@
 #include <frontend/ast/visitor/sementic_check/ast_checker.h>
-#include <debug.h>
+#include <limits>
 
 namespace FE::AST
 {
+    bool ASTChecker::scalar(ExprNode& node)
+    {
+        auto* t = node.attr.val.value.type;
+        return (t != voidType && t->getTypeGroup() != TypeGroup::POINTER) ||
+            fail(node, "expected numeric scalar (void/array is not a numeric value)");
+    }
+
+    bool ASTChecker::dimensions(std::vector<ExprNode*>* dims, std::vector<int>& out, bool parameter)
+    {
+        bool ok = true;
+        if (!dims) return true;
+        size_t total = 1;
+        for (size_t i = 0; i < dims->size(); ++i)
+        {
+            auto* d = (*dims)[i];
+            if (!d && parameter && i == 0) { out.push_back(-1); continue; }
+            if (!d) { ok = false; continue; }
+            bool valid = apply(*this, *d);
+            auto& v = d->attr.val;
+            // 语法阶段以字面量 -1 表示形参首维的 []，不是真实负维度。
+            if (parameter && i == 0 && valid && v.isConstexpr && v.value.type == intType && v.getInt() == -1)
+            { out.push_back(-1); continue; }
+            valid &= v.isConstexpr && (v.value.type == intType || v.value.type == llType);
+            if (!valid || v.getLL() <= 0 || v.getLL() > std::numeric_limits<int>::max())
+            { ok &= fail(*d, "array dimension must be a positive integer constant"); out.push_back(1); }
+            else
+            {
+                out.push_back(v.getInt());
+                if (total > static_cast<size_t>(std::numeric_limits<int>::max() / 4) / out.back())
+                    ok &= fail(*d, "array object is too large");
+                else total *= out.back();
+            }
+        }
+        return ok;
+    }
+
+    // 根据当前位置可容纳的最大对齐子数组递归展平；容量始终由父初始化器限定。
+    bool ASTChecker::flatten(InitDecl* init, const std::vector<int>& dims, size_t depth,
+        size_t start, size_t capacity, std::vector<ExprNode*>& out)
+    {
+        if (auto* one = dynamic_cast<Initializer*>(init))
+        { out[start] = one->init_val; return true; }
+        auto* list = dynamic_cast<InitializerList*>(init);
+        if (!list || !list->init_list) return true;
+        size_t cursor = 0;
+        bool ok = true;
+        for (auto* child : *list->init_list)
+        {
+            if (cursor >= capacity) { ok &= fail(*child, "excess elements in initializer"); continue; }
+            size_t span = 1, next = dims.size();
+            if (dynamic_cast<InitializerList*>(child))
+            {
+                for (size_t d = depth + 1; d < dims.size(); ++d)
+                {
+                    size_t candidate = 1;
+                    for (size_t j = d; j < dims.size(); ++j) candidate *= dims[j];
+                    if (cursor % candidate == 0 && candidate <= capacity - cursor)
+                    { span = candidate; next = d; break; }
+                }
+            }
+            ok &= flatten(child, dims, next, start + cursor, span, out);
+            cursor += span;
+        }
+        return ok;
+    }
+
     bool ASTChecker::visit(Initializer& node)
     {
-        // 示例实现：单个初始化器的语义检查
-        // 1) 访问初始化值表达式
-        // 2) 将子表达式的属性拷贝到当前节点
-        ASSERT(node.init_val && "Null initializer value");
-        bool res  = apply(*this, *node.init_val);
+        bool ok = apply(*this, *node.init_val);
         node.attr = node.init_val->attr;
-        return res;
+        return ok && scalar(*node.init_val);
     }
-
     bool ASTChecker::visit(InitializerList& node)
     {
-        // 示例实现：初始化器列表的语义检查
-        // 遍历列表中的每个初始化器并逐个访问
-        if (!node.init_list) return true;
-        bool res = true;
-        for (auto* init : *(node.init_list))
-        {
-            if (!init) continue;
-            res &= apply(*this, *init);
-        }
-        return res;
+        bool ok = true;
+        if (node.init_list) for (auto* i : *node.init_list) ok &= apply(*this, *i);
+        return ok;
     }
-
     bool ASTChecker::visit(VarDeclarator& node)
-    {
-        // TODO(Lab3-1): 实现变量声明器的语义检查
-        // 访问左值表达式，同步属性，处理初始化器（如果有）
-        (void)node;
-        TODO("Lab3-1: Implement VarDeclarator semantic checking");
-    }
+    { return !node.init || apply(*this, *node.init); }
 
     bool ASTChecker::visit(ParamDeclarator& node)
     {
-        // TODO(Lab3-1): 实现函数形参的语义检查
-        // 检查形参重定义，处理数组形参的类型退化，将形参加入符号表
-        (void)node;
-        TODO("Lab3-1: Implement ParamDeclarator semantic checking");
+        bool ok = true;
+        VarAttr a(node.type, false, symTable.getScopeDepth());
+        ok &= dimensions(node.dims, a.arrayDims, true);
+        if (node.type == voidType) ok &= fail(node, "void parameter");
+        if (!a.arrayDims.empty()) a.type = TypeFactory::getPtrType(node.type);
+        auto* old = symTable.getSymbol(node.entry);
+        if (old && old->scopeLevel == a.scopeLevel) ok &= fail(node, "duplicate parameter " + node.entry->getName());
+        node.info = a;
+        node.attr.val.value.type = a.type;
+        symTable.addSymbol(node.entry, a);
+        return ok;
     }
 
     bool ASTChecker::visit(VarDeclaration& node)
     {
-        // TODO(Lab3-1): 实现变量声明的语义检查
-        // 遍历声明列表，检查重定义，处理数组维度和初始化，将符号加入符号表
-        (void)node;
-        TODO("Lab3-1: Implement VarDeclaration semantic checking");
+        bool ok = true;
+        if (node.type == voidType) return fail(node, "void variable");
+        for (auto* d : *node.decls)
+        {
+            auto* l = dynamic_cast<LeftValExpr*>(d->lval);
+            if (!l) { ok &= fail(*d, "invalid declarator"); continue; }
+            VarAttr a(node.type, node.isConstDecl, symTable.getScopeDepth());
+            bool valid = dimensions(l->indices, a.arrayDims, false);
+            auto* old = symTable.getSymbol(l->entry);
+            if ((old && old->scopeLevel == a.scopeLevel) ||
+                (symTable.isGlobalScope() && funcDecls.count(l->entry)))
+                valid &= fail(*d, "duplicate declaration " + l->entry->getName());
+            if (node.isConstDecl && !d->init) valid &= fail(*d, "const declaration needs initializer");
+            // 先加入当前声明，初始化表达式中的名字按声明点规则解析。
+            symTable.addSymbol(l->entry, a);
+            if (d->init) valid &= apply(*this, *d->init);
+            if (!valid) { ok = false; continue; }
+            size_t count = 1;
+            for (int n : a.arrayDims) count *= n;
+            if (d->init || (symTable.isGlobalScope() && a.arrayDims.empty()) || node.isConstDecl)
+            {
+                d->initElements.assign(count, nullptr);
+                if (d->init) valid &= flatten(d->init, a.arrayDims, 0, 0, count, d->initElements);
+                if (!valid) { ok = false; continue; }
+                a.initList.reserve(count);
+                for (auto* e : d->initElements)
+                {
+                    if (e && (node.isConstDecl || symTable.isGlobalScope()) && !e->attr.val.isConstexpr)
+                        valid &= fail(*e, "initializer must be a constant expression");
+                    VarValue v = node.type == floatType ? VarValue(0.0f) : VarValue(0);
+                    if (e && e->attr.val.isConstexpr)
+                        v = node.type == floatType ? VarValue(e->attr.val.getFloat()) : VarValue(e->attr.val.getInt());
+                    a.initList.push_back(v);
+                }
+            }
+            d->info = a;
+            d->attr.val.value.type = node.type;
+            l->resolved = a;
+            l->attr.val.value.type = node.type;
+            symTable.addSymbol(l->entry, a);
+            if (symTable.isGlobalScope()) glbSymbols[l->entry] = a;
+            ok &= valid;
+        }
+        return ok;
     }
-}  // namespace FE::AST
+}

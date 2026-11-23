@@ -3,12 +3,14 @@
 
 #include <frontend/symbol/isymbol_table.h>
 #include <map>
+#include <vector>
 
 namespace FE::Sym
 {
     class SymTable : public iSymTable<SymTable>
     {
         friend iSymTable<SymTable>;
+        std::vector<std::map<Entry*, FE::AST::VarAttr>> scopes;
 
         void reset_impl();
 

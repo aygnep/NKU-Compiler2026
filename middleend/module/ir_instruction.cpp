@@ -138,9 +138,17 @@ namespace ME
         }
         else
         {
-            size_t step = 1;
-            for (int dim : initList.arrayDims) step *= dim;
-            initArrayGlb(ss, dt, initList, 0, 0, step - 1);
+            if (initList.initList.empty())
+            {
+                for (int dim : initList.arrayDims) ss << "[" << dim << " x ";
+                ss << dt << std::string(initList.arrayDims.size(), ']') << " zeroinitializer";
+            }
+            else
+            {
+                size_t step = 1;
+                for (int dim : initList.arrayDims) step *= dim;
+                initArrayGlb(ss, dt, initList, 0, 0, step - 1);
+            }
         }
         ss << getComment();
         return ss.str();

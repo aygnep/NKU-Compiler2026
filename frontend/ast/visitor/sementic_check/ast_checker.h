@@ -44,6 +44,17 @@ namespace FE::AST
         std::map<FE::Sym::Entry*, FuncDeclStmt*> funcDecls;
 
         bool mainExists;
+        bool fail(const Node& node, const std::string& text)
+        {
+            errors.push_back("line " + std::to_string(node.line_num) + ":" +
+                std::to_string(node.col_num) + ": " + text);
+            return false;
+        }
+        bool scalar(ExprNode& node);
+        bool dimensions(std::vector<ExprNode*>* dims, std::vector<int>& out, bool parameter);
+        bool flatten(InitDecl* init, const std::vector<int>& dims, size_t depth,
+            size_t start, size_t capacity, std::vector<ExprNode*>& out);
+
 
         bool  funcHasReturn;
         Type* curFuncRetType;

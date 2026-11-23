@@ -224,15 +224,6 @@ int main(int argc, char** argv)
             goto cleanup_files;
         }
 
-        if (step == "-parser")
-        {
-            FE::AST::ASTPrinter printer;
-            std::ostream*       osPtr = outStream;
-            apply(printer, *ast, osPtr);
-
-            ret = 0;
-            goto cleanup_ast;
-        }
 
         /*
          * Lab 3-1: 语义分析
@@ -272,6 +263,16 @@ int main(int argc, char** argv)
             cerr << "Semantic check failed with " << checker.errors.size() << " errors." << endl;
             for (const auto& err : checker.errors) cerr << "Error: " << err << endl;
             ret = 1;
+            goto cleanup_ast;
+        }
+
+        if (step == "-parser")
+        {
+            FE::AST::ASTPrinter printer;
+            std::ostream*       osPtr = outStream;
+            apply(printer, *ast, osPtr);
+
+            ret = 0;
             goto cleanup_ast;
         }
 

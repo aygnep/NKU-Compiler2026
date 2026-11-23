@@ -145,6 +145,13 @@ namespace ME
         void visit(FE::AST::ContinueStmt& node, Module* m) override;
         void visit(FE::AST::ForStmt& node, Module* m) override;
 
+        bool terminated() const { return !curBlock->insts.empty() && curBlock->insts.back()->isTerminator(); }
+        size_t castReg(DataType from, DataType to, size_t reg);
+        Operand* address(FE::AST::LeftValExpr& node, Module* m, bool decay);
+        void logical(FE::AST::BinaryExpr& node, Module* m, bool isAnd);
+        void jump(size_t target) { if (!terminated()) insert(createBranchInst(target)); }
+        std::vector<std::pair<size_t, size_t>> loops; // continue / break targets
+
         void handleAssign(FE::AST::LeftValExpr& lhs, FE::AST::ExprNode& rhs, Module* m);
         void handleLogicalAnd(FE::AST::BinaryExpr& node, FE::AST::ExprNode& lhs, FE::AST::ExprNode& rhs, Module* m);
         void handleLogicalOr(FE::AST::BinaryExpr& node, FE::AST::ExprNode& lhs, FE::AST::ExprNode& rhs, Module* m);

@@ -5,10 +5,16 @@ namespace FE::AST
 {
     bool ASTChecker::visit(Root& node)
     {
-        // TODO(Lab3-1): 实现根节点的语义检查
-        // 重置符号表，遍历所有顶层语句进行检查，确保存在main函数
-        (void)node;
-        TODO("Lab3-1: Implement Root node semantic checking");
+        symTable.reset();
+        bool ok = true;
+        if (node.getStmts()) for (auto* stmt : *node.getStmts())
+        {
+            if (!dynamic_cast<VarDeclStmt*>(stmt) && !dynamic_cast<FuncDeclStmt*>(stmt))
+                ok &= fail(*stmt, "only declarations are allowed at global scope");
+            else ok &= apply(*this, *stmt);
+        }
+        if (!mainExists) ok &= fail(node, "missing main function definition");
+        return ok && errors.empty();
     }
 
     void ASTChecker::libFuncRegister()
@@ -123,5 +129,9 @@ namespace FE::AST
         stoptime_param->attr.val.value.type = intType;
         stoptime_params->push_back(stoptime_param);
         funcDecls[_sysy_stoptime] = new FuncDeclStmt(voidType, _sysy_stoptime, stoptime_params);
+
+        // SysY I/O 库的数组实参作为连续内存缓冲区传递；检查元素类型即可。
+        // 官方 Advanced/71_derich1.sy 使用二维浮点缓冲区调用 getfarray/putfarray。
+
     }
 }  // namespace FE::AST
