@@ -10,6 +10,7 @@
 #include <middleend/module/ir_module.h>
 #include <debug.h>
 #include <list>
+#include <functional>
 
 /*
  * Lab 3-2: 中间代码生成 (IR Generation)
@@ -145,6 +146,21 @@ namespace ME
         void visit(FE::AST::ContinueStmt& node, Module* m) override;
         void visit(FE::AST::ForStmt& node, Module* m) override;
 
+        struct TensorValue { Operand* ptr; std::vector<Operand*> dims; };
+        std::map<FE::AST::ExprNode*, TensorValue> tensorValues;
+        std::map<size_t, std::vector<Operand*>> tensorDims;
+        Operand* tensorReturn = nullptr;
+        Block* allocationBlock = nullptr; // 动态张量临时空间仅在函数序言中分配一次
+        TensorValue tensorEval(FE::AST::ExprNode& node, Module* m);
+        TensorValue tensorTemp(DataType t, const std::vector<Operand*>& dims);
+        Operand* tensorCount(const std::vector<Operand*>& dims);
+        Operand* elementPtr(DataType t, Operand* ptr, Operand* index);
+        Operand* scalarIR(Operator op, DataType t, Operand* a, Operand* b);
+        void tensorLoop(Operand* count, const std::function<void(Operand*)>& body);
+        void tensorCheck(Operand* a, Operand* b, DataType type = DataType::I32);
+        void tensorCopy(DataType t, const TensorValue& from, const TensorValue& to);
+        void tensorUnary(FE::AST::UnaryExpr& node, Module* m);
+        void tensorBinary(FE::AST::BinaryExpr& node, Module* m);
         bool terminated() const { return !curBlock->insts.empty() && curBlock->insts.back()->isTerminator(); }
         size_t castReg(DataType from, DataType to, size_t reg);
         Operand* address(FE::AST::LeftValExpr& node, Module* m, bool decay);

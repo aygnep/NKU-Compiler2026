@@ -9,7 +9,8 @@
 
 #define AST_TYPEGROUP_DECL  \
     X(BASIC, basic type, 0) \
-    X(POINTER, pointer type, 1)
+    X(POINTER, pointer type, 1) \
+    X(TENSOR, tensor type, 2)
 
 #define AST_BASETYPE_DECL                                                           \
     X(UNK, unknown type, 0)                                                         \
@@ -37,7 +38,8 @@
     X(BITAND, &, 14)            \
     X(AND, &&, 15)              \
     X(OR, ||, 16)               \
-    X(ASSIGN, =, 17)
+    X(ASSIGN, =, 17) \
+    X(MATMUL, @, 18)
 
 namespace FE::AST
 {
@@ -110,11 +112,22 @@ namespace FE::AST
         PtrType(Type* t = nullptr) : base(t) {}
     };
 
+    struct TensorType : public Type
+    {
+        Type* base;
+        explicit TensorType(Type* t) : base(t) {}
+        std::string toString() const override { return "tensor " + base->toString(); }
+        Type_t getBaseType() const override { return base->getBaseType(); }
+        TypeGroup getTypeGroup() const override { return TypeGroup::TENSOR; }
+    };
+    inline bool isTensor(Type* t) { return t && t->getTypeGroup() == TypeGroup::TENSOR; }
+
     class TypeFactory
     {
       public:
         static Type* getBasicType(Type_t t = Type_t::UNK);
         static Type* getPtrType(Type* t = nullptr);
+        static Type* getTensorType(Type* t);
 
         static TypeFactory& getInstance()
         {

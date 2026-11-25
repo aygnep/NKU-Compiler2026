@@ -43,6 +43,10 @@ namespace FE::AST
         std::map<FE::Sym::Entry*, VarAttr>       glbSymbols;
         std::map<FE::Sym::Entry*, FuncDeclStmt*> funcDecls;
 
+        FuncDeclStmt* currentFunction = nullptr;
+        bool tensorBinary(BinaryExpr& node);
+        void inferTensorReturnShape(FuncDeclStmt& function);
+        bool tensorSame(ExprNode& a, ExprNode& b, const Node& where);
         bool mainExists;
         bool fail(const Node& node, const std::string& text)
         {

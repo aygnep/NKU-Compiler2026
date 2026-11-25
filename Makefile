@@ -1,4 +1,4 @@
-INC_DIR := . interfaces utils
+INC_DIR := . interfaces utils frontend/parser
 SRC_DIR := frontend middleend backend interfaces utils
 OBJ_DIR := obj
 BIN_DIR := bin

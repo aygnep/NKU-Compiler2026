@@ -50,6 +50,7 @@ namespace ME
             for (int dim : dims) ss << "[" << dim << " x ";
             ss << dt << std::string(dims.size(), ']') << getComment();
         }
+        if (dynamicCount) ss << ", i32 " << dynamicCount;
         return ss.str();
     }
 

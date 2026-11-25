@@ -29,6 +29,14 @@ namespace ME
 
     void ASTCodeGen::visit(FE::AST::LeftValExpr& node, Module* m)
     {
+        if (FE::AST::isTensor(node.attr.val.value.type))
+        {
+            size_t reg = name2reg.getReg(node.entry);
+            auto dims = reg == static_cast<size_t>(-1) ? std::vector<Operand*>{} : tensorDims[reg];
+            if (dims.empty()) for (int d : node.tensorShape) dims.push_back(getImmeI32Operand(d));
+            tensorValues[&node] = {address(node, m, true), dims};
+            return;
+        }
         bool decay = !node.remainingDims.empty();
         Operand* ptr = address(node, m, decay);
         if (decay)
@@ -52,7 +60,10 @@ namespace ME
         else insert(createArithmeticI32Inst_ImmeAll(Operator::ADD, node.literal.getInt(), 0, reg));
     }
     void ASTCodeGen::visit(FE::AST::UnaryExpr& node, Module* m)
-    { handleUnaryCalc(*node.expr, node.op, curBlock, m); }
+    {
+        if (FE::AST::isTensor(node.attr.val.value.type)) tensorUnary(node, m);
+        else handleUnaryCalc(*node.expr, node.op, curBlock, m);
+    }
 
     void ASTCodeGen::handleAssign(FE::AST::LeftValExpr& lhs, FE::AST::ExprNode& rhs, Module* m)
     {
@@ -90,6 +101,7 @@ namespace ME
     void ASTCodeGen::visit(FE::AST::BinaryExpr& node, Module* m)
     {
         using Op = FE::AST::Operator;
+        if (FE::AST::isTensor(node.attr.val.value.type)) { tensorBinary(node, m); return; }
         if (node.op == Op::ASSIGN) handleAssign(*dynamic_cast<FE::AST::LeftValExpr*>(node.lhs), *node.rhs, m);
         else if (node.op == Op::AND) handleLogicalAnd(node, *node.lhs, *node.rhs, m);
         else if (node.op == Op::OR) handleLogicalOr(node, *node.lhs, *node.rhs, m);
@@ -99,18 +111,46 @@ namespace ME
     {
         auto* f = funcDecls.at(node.func);
         CallInst::argList args;
+        bool returnsTensor = FE::AST::isTensor(f->retType);
+        TensorValue returned{};
+        if (returnsTensor)
+        {
+            std::vector<Operand*> dims;
+            for (int d : f->returnShape) dims.push_back(getImmeI32Operand(d));
+            returned = tensorTemp(convert(f->retType), dims);
+            args.push_back({DataType::PTR, returned.ptr});
+        }
         if (node.args) for (size_t i = 0; i < node.args->size(); ++i)
         {
             auto* a = (*node.args)[i];
+            if (FE::AST::isTensor((*f->params)[i]->type))
+            {
+                auto value = tensorEval(*a, m);
+                args.push_back({DataType::PTR, value.ptr});
+                args.push_back({DataType::I32, value.dims[0]});
+                continue;
+            }
             apply(*this, *a, m);
             DataType to = convert((*f->params)[i]->attr.val.value.type);
             size_t value = castReg(convert(a->attr.val.value.type), to, getMaxReg());
             args.push_back({to, getRegOperand(value)});
+        }
+        if (returnsTensor)
+        {
+            insert(createCallInst(DataType::VOID, node.func->getName(), args));
+            tensorValues[&node] = returned;
+            return;
         }
         auto t = convert(f->retType);
         if (t == DataType::VOID) insert(createCallInst(t, node.func->getName(), args));
         else { size_t reg = getNewRegId(); insert(createCallInst(t, node.func->getName(), args, reg)); }
     }
     void ASTCodeGen::visit(FE::AST::CommaExpr& node, Module* m)
-    { if (node.exprs) for (auto* e : *node.exprs) apply(*this, *e, m); }
+    {
+        if (node.exprs) for (auto* e : *node.exprs)
+        {
+            apply(*this, *e, m);
+            if (FE::AST::isTensor(e->attr.val.value.type)) tensorValues[&node] = tensorValues.at(e);
+        }
+    }
 }

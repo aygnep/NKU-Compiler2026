@@ -43,6 +43,7 @@ namespace ME
         // void stoptime(int lineno);
         decls.emplace_back(new FuncDeclInst(DataType::VOID, "_sysy_stoptime", {DataType::I32}));
 
+        decls.emplace_back(new FuncDeclInst(DataType::VOID, "llvm.trap"));
         // llvm memset
         decls.emplace_back(new FuncDeclInst(
             DataType::VOID, "llvm.memset.p0.i32", {DataType::PTR, DataType::I8, DataType::I32, DataType::I1}));

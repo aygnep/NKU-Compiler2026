@@ -165,6 +165,7 @@ namespace ME
         std::vector<int> dims;
 
       public:
+        Operand* dynamicCount = nullptr;
         AllocaInst(DataType t, Operand* r, std::vector<int> d = {}, const std::string& c = "")
             : Instruction(Operator::ALLOCA, c), dt(t), res(r), dims(d)
         {}
