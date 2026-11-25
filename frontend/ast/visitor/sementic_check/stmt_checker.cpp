@@ -10,13 +10,18 @@ namespace FE::AST
             return fail(node, "duplicate function " + node.entry->getName());
         funcDecls[node.entry] = &node; // 先登记再检查函数体，允许递归
         if (node.entry->getName() == "main" && node.body) mainExists = true;
+        currentFunction = &node;
+        if (node.entry->getName() == "main" && isTensor(node.retType)) return fail(node, "main must return int");
         curFuncRetType = node.retType;
         funcHasReturn = false;
         symTable.enterScope();
         bool ok = true;
         if (node.params) for (auto* p : *node.params) ok &= apply(*this, *p);
+        if (isTensor(node.retType)) inferTensorReturnShape(node);
         if (node.body) ok &= apply(*this, *node.body);
         symTable.exitScope();
+        if (isTensor(node.retType) && node.returnShape.empty()) ok &= fail(node, "tensor function needs fixed-shape return");
+        currentFunction = nullptr;
         curFuncRetType = voidType;
         return ok;
     }
@@ -36,6 +41,18 @@ namespace FE::AST
             return curFuncRetType == voidType || fail(node, "non-void function needs return value");
         bool ok = apply(*this, *node.retExpr);
         if (curFuncRetType == voidType) ok &= fail(node, "void function cannot return a value");
+        else if (isTensor(curFuncRetType))
+        {
+            auto& shape = node.retExpr->tensorShape;
+            if (node.retExpr->attr.val.value.type != curFuncRetType || shape.empty())
+                ok &= fail(node, "tensor return type mismatch");
+            else
+            {
+                for (int n : shape) if (n <= 0) ok &= fail(node, "returned tensor shape must be compile-time known");
+                if (currentFunction->returnShape.empty()) currentFunction->returnShape = shape;
+                else if (currentFunction->returnShape != shape) ok &= fail(node, "tensor return shape mismatch");
+            }
+        }
         else ok &= scalar(*node.retExpr);
         return ok;
     }

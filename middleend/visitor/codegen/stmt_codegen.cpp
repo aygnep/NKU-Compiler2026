@@ -6,25 +6,49 @@ namespace ME
     { if (node.expr) apply(*this, *node.expr, m); }
     void ASTCodeGen::visit(FE::AST::FuncDeclStmt& node, Module* m)
     {
-        auto* def = new FuncDefInst(convert(node.retType), node.entry->getName());
+        bool returnsTensor = FE::AST::isTensor(node.retType);
+        auto* def = new FuncDefInst(returnsTensor ? DataType::VOID : convert(node.retType), node.entry->getName());
         auto* func = new Function(def);
         m->functions.push_back(func);
         enterFunc(func);
         enterBlock(createBlock());
         name2reg.enterScope();
-        reg2attr.clear(); paramPtrTab.clear(); loops.clear();
+        reg2attr.clear(); paramPtrTab.clear(); loops.clear(); tensorDims.clear(); tensorValues.clear();
+        tensorReturn = nullptr;
+        if (returnsTensor)
+        {
+            tensorReturn = getRegOperand(getNewRegId());
+            def->argRegs.push_back({DataType::PTR, tensorReturn});
+        }
+        std::map<FE::AST::ParamDeclarator*, size_t> parameterRegs;
+        std::map<FE::AST::ParamDeclarator*, size_t> extentRegs;
         if (node.params)
         {
             // 所有参数寄存器先分配，再建立标量参数的栈槽。
             for (auto* p : *node.params)
             {
                 size_t reg = getNewRegId();
-                def->argRegs.push_back({convert(p->attr.val.value.type), getRegOperand(reg)});
+                bool tensor = FE::AST::isTensor(p->type);
+                parameterRegs[p] = reg;
+                def->argRegs.push_back({tensor ? DataType::PTR : convert(p->attr.val.value.type), getRegOperand(reg)});
+                if (tensor)
+                {
+                    size_t extent = getNewRegId();
+                    extentRegs[p] = extent;
+                    def->argRegs.push_back({DataType::I32, getRegOperand(extent)});
+                }
             }
             for (size_t i = 0; i < node.params->size(); ++i)
             {
                 auto* p = (*node.params)[i];
-                size_t reg = def->argRegs[i].second->getRegNum();
+                size_t reg = parameterRegs.at(p);
+                if (FE::AST::isTensor(p->type))
+                {
+                    std::vector<Operand*> dims{getRegOperand(extentRegs.at(p))};
+                    for (size_t j = 1; j < p->info.arrayDims.size(); ++j)
+                        dims.push_back(getImmeI32Operand(p->info.arrayDims[j]));
+                    tensorDims[reg] = dims;
+                }
                 bool pointer = !p->info.arrayDims.empty();
                 if (!pointer)
                 {
@@ -38,13 +62,17 @@ namespace ME
                 paramPtrTab[reg] = pointer;
             }
         }
+        allocationBlock = curBlock;
+        Block* bodyBlock = createBlock();
+        jump(bodyBlock->blockId);
+        enterBlock(bodyBlock);
         if (node.body) apply(*this, *node.body, m);
         // 不可达的合流块仍需合法终结；非 void 落到函数末尾按课程约定补零。
         for (auto& [id, block] : func->blocks)
         {
             (void)id;
             if (!block->insts.empty() && block->insts.back()->isTerminator()) continue;
-            if (node.retType == FE::AST::voidType) block->insertBack(createRetInst());
+            if (returnsTensor || node.retType == FE::AST::voidType) block->insertBack(createRetInst());
             else if (node.retType == FE::AST::floatType) block->insertBack(createRetInst(0.0f));
             else block->insertBack(createRetInst(0));
         }
@@ -66,6 +94,13 @@ namespace ME
     void ASTCodeGen::visit(FE::AST::ReturnStmt& node, Module* m)
     {
         if (!node.retExpr) { insert(createRetInst()); return; }
+        if (tensorReturn)
+        {
+            auto value = tensorEval(*node.retExpr, m);
+            tensorCopy(convert(node.retExpr->attr.val.value.type), value, {tensorReturn, value.dims});
+            insert(createRetInst());
+            return;
+        }
         apply(*this, *node.retExpr, m);
         auto target = curFunc->funcDef->retType;
         size_t result = castReg(convert(node.retExpr->attr.val.value.type), target, getMaxReg());

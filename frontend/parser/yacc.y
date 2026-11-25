@@ -68,6 +68,7 @@
 
 %token <std::string> IDENT 
 
+%token TENSOR MATMUL
 %token CONST INT FLOAT VOID IF ELSE FOR WHILE CONTINUE BREAK SWITCH CASE GOTO DO RETURN
 %token SEMICOLON COMMA LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token LE GE EQ NE AND OR ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN
@@ -491,6 +492,9 @@ MULDIV_EXPR:
     | MULDIV_EXPR SLASH UNARY_EXPR {
         $$ = new BinaryExpr(Operator::DIV, $1, $3, @1.begin.line, @1.begin.column);
     }
+    | MULDIV_EXPR MATMUL UNARY_EXPR {
+        $$ = new BinaryExpr(Operator::MATMUL, $1, $3, @1.begin.line, @1.begin.column);
+    }
     | MULDIV_EXPR PERCENT UNARY_EXPR {
         $$ = new BinaryExpr(Operator::MOD, $1, $3, @1.begin.line, @1.begin.column);
     }
@@ -583,6 +587,9 @@ LITERAL_EXPR:
     ;
 
 TYPE:
+    TENSOR INT { $$ = TypeFactory::getTensorType(intType); }
+    | TENSOR FLOAT { $$ = TypeFactory::getTensorType(floatType); }
+    |
     INT {
         $$ = intType;
     }

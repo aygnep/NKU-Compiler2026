@@ -11,6 +11,8 @@ namespace FE::AST
     class ExprNode : public Node
     {
       public:
+        std::vector<int> tensorShape; // -1 仅表示形参的运行期首维
+        std::vector<VarValue> tensorData; // 全局初始化的编译期元素；不用于运行期折叠
         size_t trueTar;
         size_t falseTar;
 

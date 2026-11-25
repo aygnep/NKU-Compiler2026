@@ -62,6 +62,13 @@ namespace FE::AST
         }
     }
 
+    Type* TypeFactory::getTensorType(Type* t)
+    {
+        // 仅有两种元素类型；静态对象拥有其生命周期，不与指针缓存混用。
+        static TensorType integer(intType), floating(floatType);
+        return t->getBaseType() == Type_t::FLOAT ? &floating : &integer;
+    }
+
     Type* TypeFactory::getBasicType(Type_t t) { return baseTypes[static_cast<size_t>(t)]; }
     Type* TypeFactory::getPtrType(Type* t)
     {

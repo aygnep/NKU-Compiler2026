@@ -38,6 +38,7 @@ namespace FE::AST
     class FuncDeclStmt : public StmtNode
     {
       public:
+        std::vector<int> returnShape;
         Type*                          retType;
         Entry*                         entry;
         std::vector<ParamDeclarator*>* params;

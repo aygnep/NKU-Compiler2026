@@ -6,7 +6,7 @@ namespace FE::AST
     bool ASTChecker::scalar(ExprNode& node)
     {
         auto* t = node.attr.val.value.type;
-        return (t != voidType && t->getTypeGroup() != TypeGroup::POINTER) ||
+        return (t != voidType && t->getTypeGroup() == TypeGroup::BASIC) ||
             fail(node, "expected numeric scalar (void/array is not a numeric value)");
     }
 
@@ -90,7 +90,12 @@ namespace FE::AST
         VarAttr a(node.type, false, symTable.getScopeDepth());
         ok &= dimensions(node.dims, a.arrayDims, true);
         if (node.type == voidType) ok &= fail(node, "void parameter");
-        if (!a.arrayDims.empty()) a.type = TypeFactory::getPtrType(node.type);
+        if (isTensor(node.type))
+        {
+            if (a.arrayDims.empty() || a.arrayDims[0] != -1)
+                ok &= fail(node, "tensor parameter must start with []");
+        }
+        else if (!a.arrayDims.empty()) a.type = TypeFactory::getPtrType(node.type);
         auto* old = symTable.getSymbol(node.entry);
         if (old && old->scopeLevel == a.scopeLevel) ok &= fail(node, "duplicate parameter " + node.entry->getName());
         node.info = a;
@@ -114,8 +119,34 @@ namespace FE::AST
                 (symTable.isGlobalScope() && funcDecls.count(l->entry)))
                 valid &= fail(*d, "duplicate declaration " + l->entry->getName());
             if (node.isConstDecl && !d->init) valid &= fail(*d, "const declaration needs initializer");
+            if (isTensor(node.type) && a.arrayDims.empty())
+                valid &= fail(*d, "tensor declaration requires positive dimensions");
             // 先加入当前声明，初始化表达式中的名字按声明点规则解析。
             symTable.addSymbol(l->entry, a);
+            // 张量整体表达式初值与逐元素初值列表走不同路径。
+            auto* whole = isTensor(node.type) ? dynamic_cast<Initializer*>(d->init) : nullptr;
+            if (whole)
+            {
+                valid &= apply(*this, *whole->init_val);
+                auto* e = whole->init_val;
+                if (!isTensor(e->attr.val.value.type) || e->attr.val.value.type != node.type ||
+                    e->tensorShape.size() != a.arrayDims.size())
+                    valid &= fail(*d, "tensor initializer type or shape mismatch");
+                else for (size_t i = 0; i < a.arrayDims.size(); ++i)
+                    if (e->tensorShape[i] > 0 && e->tensorShape[i] != a.arrayDims[i])
+                        valid &= fail(*d, "tensor initializer shape mismatch");
+                if (symTable.isGlobalScope() || node.isConstDecl)
+                {
+                    if (e->tensorData.empty()) valid &= fail(*d, "global/const tensor initializer must be compile-time evaluable");
+                    else a.initList = e->tensorData;
+                }
+                d->info = a; l->resolved = a; l->tensorShape = a.arrayDims;
+                l->attr.val.value.type = node.type;
+                symTable.addSymbol(l->entry, a);
+                if (symTable.isGlobalScope()) glbSymbols[l->entry] = a;
+                ok &= valid;
+                continue;
+            }
             if (d->init) valid &= apply(*this, *d->init);
             if (!valid) { ok = false; continue; }
             size_t count = 1;
@@ -130,9 +161,12 @@ namespace FE::AST
                 {
                     if (e && (node.isConstDecl || symTable.isGlobalScope()) && !e->attr.val.isConstexpr)
                         valid &= fail(*e, "initializer must be a constant expression");
-                    VarValue v = node.type == floatType ? VarValue(0.0f) : VarValue(0);
+                    auto* base = TypeFactory::getBasicType(node.type->getBaseType());
+                    if (isTensor(node.type) && e && e->attr.val.value.type != base)
+                        valid &= fail(*e, "tensor initializer element type mismatch");
+                    VarValue v = base == floatType ? VarValue(0.0f) : VarValue(0);
                     if (e && e->attr.val.isConstexpr)
-                        v = node.type == floatType ? VarValue(e->attr.val.getFloat()) : VarValue(e->attr.val.getInt());
+                        v = node.type->getBaseType() == Type_t::FLOAT ? VarValue(e->attr.val.getFloat()) : VarValue(e->attr.val.getInt());
                     a.initList.push_back(v);
                 }
             }

@@ -22,6 +22,18 @@ namespace ME
             name2reg.addSymbol(l->entry, ptr);
             reg2attr[ptr] = a;
             paramPtrTab[ptr] = false;
+            if (FE::AST::isTensor(node.type))
+            {
+                std::vector<Operand*> dims;
+                for (int n : a.arrayDims) dims.push_back(getImmeI32Operand(n));
+                tensorDims[ptr] = dims;
+                if (auto* whole = dynamic_cast<FE::AST::Initializer*>(d->init))
+                {
+                    auto value = tensorEval(*whole->init_val, m);
+                    tensorCopy(t, value, {getRegOperand(ptr), dims});
+                    continue;
+                }
+            }
             if (!d->init) continue;
             if (a.arrayDims.empty())
             {

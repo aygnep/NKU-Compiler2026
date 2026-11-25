@@ -77,6 +77,8 @@ HEXFLOAT 0[xX](({H}+\.{H}*|\.{H}+)|{H}+){HEXEXP}
 }
 
     /* Keywords must precede ID when the match length is equal. */
+"tensor"           { RETT(TENSOR, loc); }
+"@"                { RETT(MATMUL, loc); }
 "const"            { RETT(CONST, loc); }
 "int"              { RETT(INT, loc); }
 "float"            { RETT(FLOAT, loc); }

@@ -1,92 +1,313 @@
-# 实验3 AI讨论记录
+小组成员姓名：彭亚滨
 
-小组成员姓名：彭亚滨（依据现有课程材料文件名；本聊天未提供其他成员）
-学号：2413460（同上）
-GitLab 地址：[compiler-principles/lexer](https://gitlab.eduxiji.net/compiler-principles/lexer)
+学号：2413460
 
-本记录覆盖 Codex 聊天“查看当前完成到哪个 Lab”（聊天标识 01a20792-32c0-7f11-b9a5-bdb0712a74a2）中，从 2026-11-23 首次要求完成 Lab3 开始的用户可见交流。消息取自聊天读取接口，保持原文及顺序；仅归档用户提问和 AI 对用户显示的回复，不包含隐藏推理或内部指令。首次归档截止于开始本地提交和独立复现之前，后续实质验证结论在末尾续录。此前的 Lab2 交流不在覆盖范围内。
+GitLab 仓库：[compiler-principles/lexer](https://gitlab.eduxiji.net/compiler-principles/lexer)
 
-## 本次请求
+# 实验3 张量扩展与 LLVM IR 实现
 
-> ```perl
-> 使用 $compiler-lab-delivery 完成 Lab3
-> PDF 手册和智能纪要已放好
-> 完成后准备好本地提交，暂不 push。
-> ```
+> 新版手册多了 tensor 和 @，原来 Lab3 已经两组 100/100，这次从哪里继续？先不要 push。
 
-<details>
-<summary>9 条阶段回复（实际原文，按发生顺序）</summary>
+<details><summary>1 previous message</summary>
 
-### 阶段 1
-
-我会按 `compiler-lab-delivery` 技能完成 Lab3：先核对手册和纪要、保存当前代码基线，再实现并验证类型检查与中间代码生成，最后生成学习文档和真实讨论记录，形成本地提交，停在 push 之前。
-
-### 阶段 2
-
-手册确认 Lab3 包含语义检查和 LLVM IR 生成，数组、浮点属于进阶要求，我会一并实现并测试。仓库中已有的 Lab2 修改会保留在原处；当前 Docker 尚未启动，我正在恢复课程容器，并保存编辑前快照。
-
-### 阶段 3
-
-语义检查的主体已补上，包括嵌套作用域、常量表达式、函数参数匹配和数组初始化展平。容器已恢复，且确认挂载的是当前源码。接下来实现 IR；验证时会分别检查语义报错、LLVM IR 合法性，以及链接运行后的输出和返回值。
-
-### 阶段 4
-
-首轮已构建成功，18 个官方语义错误样例均被拒绝。运行官方测评时发现课程容器使用 ARM64 和 LLVM 14，而测评默认使用 x86 运行库及较新的指针语法；我正在补齐测试环境适配，保留官方脚本和样例原样，再逐项处理代码失败。
-
-### 阶段 5
-
-官方测评已分别通过：Basic **100/100**、Advanced **100/100**（均为 `-O0`，包含 IR 检查、链接和运行结果比对）。接下来补充边界回归，重点检查多维数组、短路副作用、隐式转换和错误诊断；随后生成答辩学习文档，并从最终本地提交做干净复现。
-
-### 阶段 6
-
-边界回归发现一处兼容性问题：官方进阶样例把二维数组作为连续缓冲区传给 `getfarray/putfarray`，库函数参数不能统一限制为一维。我已据此调整库函数检查；用户自定义函数仍检查数组秩和尾维，并重新运行整套验证。
-
-### 阶段 7
-
-最新一轮验证通过：46 个语义负例均按预期报错，20 个执行回归及官方 Basic、Advanced 各 100 例全部通过。Bison 诊断也已检查：未解决冲突为 0，有 1 处悬挂 `else` 冲突由优先级消解，另有 11 个未使用 token。现在开始编写学习文档，并用 `reviewwrite` 和 Tabbit 检查文字与页面。
-
-### 阶段 8
-
-学习文档已生成，包含 26 个真实左右代码差异块，以及手册第 24 页的 9 道答辩题和参考回答。正在检查长代码横向滚动、红绿标记和答案折叠，同时核对源码摘要与提交范围。
-
-### 阶段 9
-
-页面检查已通过：左右代码、中文注释、长行滚动和答案折叠均可用；窄屏也保留两栏。源码摘要与文档一致。现在整理真实讨论记录并提交本次文件，随后从该提交导出独立目录，重新构建和运行验证。
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `frontend/ast/visitor/sementic_check/ast_checker.h`
+> - Read `middleend/visitor/codegen/ast_codegen.h`
+>
+> </details>
 
 </details>
 
-## 实际开发与验证说明
+原官方输入没有 tensor/@，旧测试通过只能说明原范围。本次从已有 Lab3-1 的语义访问者和 Lab3-2 的 IR 访问者继续扩展。新版第 9–12 页规定张量语义，第 25 页把张量列入进阶；for 也列为基础，但原实现已经支持。11 月 9 日纪要没有张量内容，新增部分按新版 PDF 和《张量实现要求.pdf》执行。
 
-以下为实际工具结果的归纳，不是虚构的额外聊天轮次。完整日志和不可变源码快照保存在仓库外的本次证据目录；仓库中的回归驱动可重新产生结果。
+> 先把输入到输出的过程串一下。我需要重新写一套编译器吗？
 
-- 阅读材料：《类型检查及中间代码生成.pdf》24 页及智能纪要 ZIP 中的 Markdown、4 张附件图。按 PDF p4–8 的类型、作用域和初始化约束实现，按 p10–22 生成 LLVM IR。学习文档的 9 道问答取自 p24，属于教学材料，不冒充用户回答。
-- 编辑前保存真实工作区快照：起始分支 main、HEAD 7958142。用户已有 yacc.y 注释、Lab2 讨论记录和临时样例均保留；未将它们算作本次新增。学习文档双方摘要一致排除未改动的 yacc.y，以便在不提交用户旧改动的情况下独立复现。
-- Docker 初始未运行，启动后确认宿主 lab/docker 挂载为 /workspace；编译器在相同源码上执行 make，课程 -Werror 构建成功。没有引用其他参考仓库的实现代码。
-- 初轮环境失败：LLVM 14 默认不接受 opaque ptr，官方 Basic 报 IR 语法错误，0/100。开启 LLVM 14 的指针选项后继续测试。曾在同目录同时启动两组官方脚本，发现它们共享 tmp.o/tmp.bin，停止并丢弃这轮受干扰结果；以后两组串行执行。
-- native 运行库初次重建后出现 undefined reference，原因是 sylib.h 中的 extern 计时对象在 sylib.c 中没有存储定义；独立 Basic 当时为 56/100，失败为链接错误。新增 runtime_globals.c 为原接口提供存储，临时构建本机运行库；原预编译库、官方测评脚本和答案不变。
-- 实现调试中识别并支持形参首维 [] 在语法树中以 LiteralExpr(-1) 表示；无初值全局数组用 zeroinitializer，避免为巨大数组复制全部零值。最终 Basic、Advanced 首次分别达到 100/100。
-- 补充边界检查后出现 Advanced 99/100：统一把库数组参数限制为一维导致 71_derich1.sy 被拒绝。检查原样例后确认它将二维图像缓冲区直接传给 getfarray/putfarray；改为库函数检查元素类型、用户函数检查秩和尾维，并把错误的一维假设从自建回归中纠正。最终复测两组恢复 100/100。
-- 最终开发树命令：`python3 testcase/lab3/run.py --native --official --logs /tmp/lab3-regression2`，退出 0；18 个官方语义负例 + 28 个补充负例按预期拒绝；20 个正例逐项检查 llvm-as、链接、标准输出与返回值；Basic 100/100，Advanced 100/100。没有仅凭 test.py 的退出码认定通过，驱动额外解析 Passed 汇总。
-- 在临时目录对原语法运行 Bison 3.8.2：`bison -d -v -Wall -Wcounterexamples -Werror=conflicts-sr -Werror=conflicts-rr --report=all yacc.y`，退出 0。未解决 S/R 和 R/R 均 0，无无用规则/非终结符；11 个未使用 token；1 处 THEN<ELSE 优先级解决的 shift 冲突。就近 else 与花括号结构回归执行通过。
-- `-parser` 已移至语义检查后：小程序 int a=5; return a+!a 合法输出 AST；undef1.sy 报未定义变量并退出 1。相同小程序的实际 IR 含 alloca、store、load、icmp eq、zext、add、ret；执行返回 5。
-- 学习文档按真实前后快照生成 26 块 diff；与最终源码摘要核对一致。文字经过出处与限定条件复核；浏览器实际检查 26 块双栏、纯新增和纯删除、中文、红绿及 +/- 标记、长行横向滚动、答案折叠、来源锚点和窄屏两栏。文档没有外部脚本/字体依赖。
+沿用现有流程：
 
-## 使用范围与课程操作
+```text
+.sy → lexer.l 的 tensor/@ token
+    → yacc.y 的 TensorType / MATMUL 节点
+    → ASTChecker 的元素类型、秩与形状检查
+    → ASTCodeGen 的张量缓冲与循环 IR
+    → llvm-as → 链接运行 → stdout/返回值
+```
 
-当前检查结论限于 Linux ARM64、LLVM 14、-O0 的本地运行验证。未执行课程 OJ、未验证 Lab4 优化或后端性能，未推送远端。手册 p3 另外要求在小雅提交 GitLab 链接、按小组进行课堂讲解，这些操作不包含在本次本地开发中。
+AST 和 IR 的访问者接口继续使用。新增 TensorType 区分普通数组与整体张量，TensorValue 则为代码生成保存指针和实际尺寸。错误输入在语义阶段退出，未知首维的运行期不匹配另做检查。
 
-本聊天没有用户针对学习问答的实际回答，因此不记录“已完全掌握”等判断。后续交付链接和提交编号属于归档截止点之后的交付信息；若发生实质代码修改或失败，会继续归档。
+> 比如这个，为什么 b*2 不是矩阵乘？
+>
+> ```c
+> tensor int a[4]={1,2,3,4};
+> tensor int b[4]={5,6,7,8};
+> tensor int c[4]=a+b*2+10;
+> ```
 
-## 归档续录：页面验收与独立复现
+* 明确是逐元素乘，@ 才是矩阵乘。b*2 把标量 2 提升成同形状值，得到 [10,12,14,16]；加 a 后为 [11,14,17,20]；再加 10 得 [21,24,27,30]。
 
-以下继续保存实际显示在本聊天中的阶段回复，顺序承接前面 9 条阶段回复。
+IR 不必真的分配一个全是 2 的数组。先求出标量寄存器，再在元素循环中复用它，副作用函数也只能求一次。
 
-### 阶段 10
+> 普通 int a[4] 也有形状，直接让数组支持加法不行吗？
 
-页面检查已通过：左右代码、中文注释、长行滚动和答案折叠均可用；窄屏也保留两栏。源码摘要与文档一致。现在整理真实讨论记录并提交本次文件，随后从该提交导出独立目录，重新构建和运行验证。
+<details><summary>1 previous message</summary>
 
-### 阶段 11
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `interfaces/frontend/ast/ast_defs.h`
+> - Read `frontend/ast/expr.h`
+> - Read `frontend/ast/visitor/sementic_check/expr_checker.cpp`
+>
+> </details>
 
-本地提交已形成，独立目录中的重新构建、46 个语义负例、20 个执行回归及官方两组各 100 例也全部通过。原工作区的 Lab2 修改仍保持原样。最后只补录这次复现结论，并核对最终提交的源码摘要和交付文件。
+</details>
 
-本次截止点为上述第 11 条阶段回复。独立复现来自真实本地提交导出的新目录，不使用原工作区的 obj/bin 或未提交的 Lab2 文件；命令仍为 `python3 testcase/lab3/run.py --native --official --logs <独立日志目录>`。后续只有本记录的续录、提交编号变化和同源码复核，没有改变实现、输入或预期。最终提交将再导出新目录进行相同验证；若出现失败须继续补录。最终交付链接不另造为用户学习问答。
+需要保留类型边界。TensorType 保存 int/float 基类型，ExprNode::tensorShape 保存维度。普通数组继续按原来的下标与指针规则处理；张量可以整体运算、赋值，要求形状和基类型匹配。
+
+张量整体读取使用零个下标；元素访问必须提供与秩相同的下标个数。二维张量 a[0] 是部分下标，会被拒绝；a[0][1] 才是标量元素。
+
+> @ 应该放加法那层还是乘法那层？我不想再弄出文法冲突。
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `frontend/parser/lexer.l`
+> - Read `frontend/parser/yacc.y`
+>
+> </details>
+
+</details>
+
+按张量补充材料第 1 页，@ 放在 MulExp，与 * / % 同层。当前文法用左递归，因此 A@B*C 先做 A@B，再逐元素乘 C。
+
+lexer.l 返回 MATMUL，yacc.y 构建 Operator::MATMUL；TensorType 由 TENSOR INT / TENSOR FLOAT 构造。添加规则后实际运行完整 Bison 诊断，而不是只依赖 make 没报错。
+
+> 张量和标量能像普通 int+float 那样随便转换吗？float 张量能用 % 吗？
+
+张量规则更严格：int 张量只能和 int 标量混合，float 张量只能和 float 标量混合；两个张量的基类型也必须一致。% 只接受 int 张量元素。比较、&&、||、! 都不接受张量。
+
+整体赋值要求两侧都是同类型、同形状张量，而且左侧可写；不支持 a=3，也不支持把整个张量直接赋给标量。元素 a[i] 已是普通标量时，按原标量规则处理。
+
+> 手册说初始化层级匹配，但又给二维平铺的值，按哪个写？
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `frontend/ast/visitor/sementic_check/decl_checker.cpp`
+> - Read `frontend/ast/visitor/sementic_check/tensor_checker.cpp`
+> - Read `middleend/visitor/codegen/decl_codegen.cpp`
+>
+> </details>
+
+</details>
+
+材料同时给出嵌套与展平写法，因此实现按明确给出的写法兼容数组的展平和补零规则：
+
+```c
+tensor int a[2][3]={{1,2},{3}};
+tensor float b[2][2]={1.0,2.0,3.0,4.0};
+```
+
+a 得到 [[1,2,0],[3,0,0]]。局部列表先清零再存显式值；整体表达式初值另走 tensorEval 和 tensorCopy。全局整体初值从已知初始化数据计算，运行期计算则总是读取当前内存，不能用全局初值替代修改后的值。
+
+> 函数参数写 []，函数里面从哪儿得到真正长度？
+>
+> ```c
+> void add(tensor int a[]){a=a+2;}
+> ```
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `middleend/visitor/codegen/expr_codegen.cpp`
+> - Read `middleend/visitor/codegen/stmt_codegen.cpp`
+>
+> </details>
+
+</details>
+
+源语言一个张量参数在 LLVM 中降为两个参数：ptr 与隐藏的首维 i32。调用者传入长度 3 或 5，函数循环范围就分别是 3 或 5；尾维由声明中的常量决定。
+
+未知首维参加整体运算或复制时，需要比较实际尺寸，不相等则进入 llvm.trap。只检查秩、然后假定首维一定相同，会产生越界读写。
+
+> tensor int make(){tensor int r[2]={3,4};return r;} 能像数组一样 return 地址吗？
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `frontend/ast/stmt.h`
+> - Read `frontend/ast/visitor/sementic_check/tensor_checker.cpp`
+> - Read `middleend/visitor/codegen/stmt_codegen.cpp`
+>
+> </details>
+
+</details>
+
+不能返回已失效的局部栈地址。调用者先按固定返回形状分配结果缓冲，并将 ptr 作为隐藏首参数；被调用者在 return 前把元素复制进去，LLVM 签名返回 void。
+
+多个 return 必须保持类型与形状一致。返回尺寸必须编译期已知，直接返回未知首维形参会报错。为支持递归调用写在基本分支之前，先预读完整函数中的固定返回形状，再正式检查所有节点。
+
+> 整体赋值为什么还有快照？a=a@a 不是右边先算吗？
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `middleend/visitor/codegen/tensor_codegen.cpp`
+>
+> </details>
+
+</details>
+
+右边运算产生独立结果，赋值也按完整值复制。先保存右值，能覆盖别名参数和其他赋值组合，避免写目标时覆盖还没读完的源。
+
+@ 的输出元素按行列点积计算；逐元素乘只读对应位置。手册矩阵用例的实际结果为 58、64、139、154，另有 a=a@a 与源对象修改后目标不变的回归。
+
+> 新检出一 make 就缺这个，原来不是能编译吗？
+>
+> ```text
+> fatal error: FlexLexer.h: No such file or directory
+> ```
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `Makefile`
+> - Read `frontend/parser/FlexLexer.h`
+> - Ran:
+>
+> ```bash
+> docker exec lab3-tensor-check bash -lc 'make -j6 > /evidence/build2.log 2>&1; result=$?; tail -25 /evidence/build2.log; exit $result'
+> ```
+>
+> ```text
+> Linking object files -> bin/compiler
+> ```
+>
+> </details>
+
+</details>
+
+新建课程镜像没有原环境里的额外头文件，但仓库自带 frontend/parser/FlexLexer.h。Makefile 的 INC_DIR 加入 frontend/parser 后，生成器与 scanner 使用同一份仓库头文件；不需要复制旧 obj/bin，也不用改变官方测试。
+
+后续严格构建通过。干净检出能暴露原目录掩盖的环境依赖，这也是最后还要从提交重新构建的原因。
+
+> 循环里一直做 a=a+1，如果首维是动态的，临时空间是不是每次都分配？
+
+临时 alloca 不能放在循环每次经过的块。本实现维护 allocationBlock，把只依赖参数首维和静态尾维的计数、容量检查与分配放进函数序言，保存并恢复它到函数体的跳转边。
+
+张量循环本身只做 load、算术和 store。tensor_dynamic_loop 连续执行 10000 次动态长度加法；另有乘积容量超过限制的拒绝测试，确保在分配前检查。
+
+> 补返回形状预读后，编译怎么又说 ForStmt 没有 retType？
+
+插入位置过宽，把函数专属的预读也放进了 while/for 的访问函数。已改为只在 FuncDeclStmt 的参数登记后调用。
+
+同时修正测试驱动：构建或主回归失败时立即退出，不能继续用上一次的二进制测试。那次失败的日志保留，后面的成功结论来自重新构建后的运行。
+
+> 逐块看生成器时发现 while/for 也改了 allocationBlock，这会不会又把临时空间放回循环？
+
+会。分配块应只在函数入口维护，循环访问者不能把它改成循环体。已移除 while/for 中误插的序言更新，只保留 FuncDeclStmt 里的入口设置，并重新生成真实源码差异。修正后重新执行全套回归，87 个语义负例、52 个执行正例、两组各 100 个官方用例及 4 个运行期拒绝例全部通过；日志位于 test4。
+
+> 现在怎么一次验证旧功能和 tensor？官方测试没有更新，那新增部分怎么证明？
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `/private/tmp/lab3-tensor-20261125/test3/regression.log`
+> - Ran:
+>
+> ```bash
+> docker exec lab3-tensor-check bash -lc 'python3 testcase/tensor/run.py --native --official --logs /evidence/test3 > /evidence/test3-summary.log 2>&1; result=$?; tail -30 /evidence/test3-summary.log; exit $result'
+> ```
+>
+> ```text
+> Semantic negatives: 87, execution cases: 52, failures: []
+> Official Basic: Passed: 100 / 100, pass=True
+> Official Advanced: Passed: 100 / 100, pass=True
+> Tensor runtime shape rejections: 4/4; errors: []
+> ```
+>
+> </details>
+
+</details>
+
+执行：
+
+```bash
+python3 testcase/tensor/run.py --native --official --logs /tmp/lab3-tensor-results
+```
+
+原脚本与官方输入、答案保持不变。驱动增加 41 个张量语义负例、32 个执行正例，以及 4 个运行期形状/容量拒绝例。正例需要编译、LLVM 检查、链接全部成功，再比较 stdout 和返回值；运行期拒绝例则要求前面都成功、执行非零。
+
+包含旧回归后的最新汇总是：
+
+```text
+Semantic negatives: 87, execution cases: 52, failures: []
+Official Basic: Passed: 100 / 100, pass=True
+Official Advanced: Passed: 100 / 100, pass=True
+Tensor runtime shape rejections: 4/4; errors: []
+```
+
+环境为 Linux ARM64、LLVM14、-O0。这些结果不代表已经通过课程 OJ 或完成后续优化/后端。
+
+> Bison 新增 @ 后的诊断是什么？
+
+<details><summary>1 previous message</summary>
+
+> 我先核对这部分源码和对应验证结果。
+>
+> <details><summary>Explored files and commands</summary>
+>
+> - Read `/private/tmp/lab3-tensor-20261125/bison/yacc.output`
+> - Ran:
+>
+> ```bash
+> bison -d -v -Wall -Wcounterexamples -Werror=conflicts-sr -Werror=conflicts-rr --report=all yacc.y
+> ```
+>
+> ```text
+> Conflict between rule 29 and token ELSE resolved as shift (THEN < ELSE).
+> ```
+>
+> </details>
+
+</details>
+
+Bison 3.8.2 的完整报告退出 0，未解决移进/归约、归约/归约冲突均 0，没有无用规则或非终结符；11 个未使用 token，1 处 THEN<ELSE 已消解移进冲突。
+
+这仍不能把原始 CFG 称为形式化无二义性。@ 的同层左结合由 tensor_precedence 验证，原来的就近 else 与花括号规则也包含在旧回归里。
+
+> 原目录还有我没提交的 yacc.y 注释，别把它一起提交。新增代码放在哪里？
+
+为此使用独立检出 /Users/peng/.codex/worktrees/lab3-tensor/NKU-Compiler2026，分支 lab3-tensor，从已完成 Lab3 的 b05fc27 开始。原主工作区未提交的注释、文档和临时样例保持原样。
+
+新检出显式暂存张量实现、必要构建修复、测试与两份文档；保留 /doc/ 忽略规则，已跟踪文档仍能更新。不会把 Python 缓存或编译产物加入提交。
+
+> 先停在本地，最后还需要核对什么？
+
+检查暂存范围和源码摘要，再从最终本地提交导出独立新目录，用同一条驱动命令重新构建并验证。这样不依赖当前检出的 obj/bin 或未跟踪文件。
+
+学习文档绑定的是前后源码快照，提交编号留在交付信息中。按手册第 3 页，课程另需小雅提交 GitLab 链接和课堂小组讲解；本次不执行 push。
