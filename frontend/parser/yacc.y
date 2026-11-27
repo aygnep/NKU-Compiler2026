@@ -251,7 +251,7 @@ FUNC_DECL_STMT:
         Entry* entry = Entry::getEntry($2);
         $$ = new FuncDeclStmt($1, entry, $4, $6, @1.begin.line, @1.begin.column);
     }
-    | TYPE IDENT LPAREN RPAREN FUNC_BODY {
+    | TYPE IDENT LPAREN RPAREN FUNC_BODY {//无参函数写法
         Entry* entry = Entry::getEntry($2);
         $$ = new FuncDeclStmt($1, entry, new std::vector<ParamDeclarator*>(), $5,
                               @1.begin.line, @1.begin.column);
